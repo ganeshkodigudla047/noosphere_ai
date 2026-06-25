@@ -1,0 +1,9 @@
+{
+  "provider": "python",
+  "build": {
+    "install": "pip install -r requirements.txt"
+  },
+  "deploy": {
+    "start": "uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+  }
+}
