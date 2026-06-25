@@ -20,6 +20,7 @@ export function App() {
   const [chatError, setChatError] = useState<string | undefined>();
   const [uploadNotice, setUploadNotice] = useState<UploadNotice>();
   const [materialUrls, setMaterialUrls] = useState<Record<string, string>>({});
+  const [materialPages, setMaterialPages] = useState<Record<string, StoredMaterial["pages"]>>({});
   const [orbitEnabled, setOrbitEnabled] = useState(true);
   const fileInput = useRef<HTMLInputElement>(null);
   const focusTimer = useRef<number | undefined>(undefined);
@@ -38,6 +39,16 @@ export function App() {
     if (!selected) return;
     const trimmed = question.trim();
     if (!trimmed) return;
+
+    // Build full content from actual stored pages for this chunk's page range
+    const pages = materialPages[selected.documentId] ?? [];
+    const pageStart = selected.pageStart ?? selected.pageNumber ?? 1;
+    const pageEnd = selected.pageEnd ?? pageStart;
+    const fullContent = pages
+      .filter((p) => p.pageNumber >= pageStart && p.pageNumber <= pageEnd)
+      .map((p) => p.text)
+      .join("\n\n")
+      .trim() || selected.summary;
 
     setChatError(undefined);
     setChatLoading(true);
@@ -59,7 +70,7 @@ export function App() {
           node_id: selected.id,
           topic: selected.label,
           summary: selected.summary,
-          content: selected.summary,
+          content: fullContent,
           question: trimmed,
         }),
       });
@@ -153,6 +164,7 @@ export function App() {
       const restoredNodes = indexedMaterials.flatMap((material, index) => materialNodes(material, fixtureNodes.length + index));
       setNodes((current) => [...current.filter((node) => !materials.some((material) => material.id === node.documentId)), ...restoredNodes]);
       setMaterialUrls(Object.fromEntries(indexedMaterials.map((material) => [material.id, URL.createObjectURL(material.file)])));
+      setMaterialPages(Object.fromEntries(indexedMaterials.map((material) => [material.id, material.pages])));
     }).catch(() => {
       if (active) setUploadNotice({ kind: "error", message: "Saved PDFs could not be restored in this browser." });
     });
@@ -185,6 +197,7 @@ export function App() {
       const metaNode = newNodes.find((node) => node.nodeKind === "macro") ?? newNodes[0];
       setNodes((current) => [...current, ...newNodes]);
       setMaterialUrls((current) => ({ ...current, [material.id]: URL.createObjectURL(material.file) }));
+      setMaterialPages((current) => ({ ...current, [material.id]: pages }));
       const searchablePages = pages.filter((page) => page.text.length > 0).length;
       setUploadNotice({
         kind: "ready",
