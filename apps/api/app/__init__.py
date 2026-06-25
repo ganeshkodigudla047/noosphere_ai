@@ -1,0 +1,1 @@
+"""Noosphere AI ingestion service."""

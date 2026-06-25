@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "name": "Noosphere",
+    "slug": "noosphere",
+    "scheme": "noosphere",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "ios": { "supportsTablet": true, "bundleIdentifier": "ai.noosphere.app" },
+    "android": { "package": "ai.noosphere.app" }
+  }
+}
