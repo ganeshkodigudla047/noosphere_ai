@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { KnowledgeNode } from "@noosphere/domain";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { OrbitControls, Stars } from "@react-three/drei";
-import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import * as THREE from "three";
 
 type Props = {
@@ -23,7 +22,7 @@ function smoothStep(edge0: number, edge1: number, x: number) {
 }
 
 export function KnowledgeGlobe({ nodes, selected, onSelect, compact = false, orbitEnabled = true }: Props) {
-  const orbitControlsRef = useRef<OrbitControlsImpl>(null);
+  const orbitControlsRef = useRef<any>(null);
 
   return (
     <Canvas camera={{ position: [0, 0.1, compact ? 3.4 : 3.15], fov: compact ? 48 : 42 }} dpr={[1, 1.75]}>
