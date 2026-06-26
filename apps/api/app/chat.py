@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from .config import GROQ_API_KEY
 
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
-CHAT_MODEL = "llama-3.1-8b-instant"
+CHAT_MODEL = "llama-3.3-70b-versatile"
 
 
 class PageChatRequest(BaseModel):
@@ -31,24 +31,34 @@ def _build_messages(request: PageChatRequest) -> list[dict]:
         {
             "role": "system",
             "content": (
-                "You are a smart, friendly study companion. "
-                "Answer the user's question using ONLY the content provided below. "
-                "If the answer is not in the content, say so honestly.\n\n"
-                "FORMATTING RULES — follow these strictly:\n"
-                "- Use **bold** for key terms and headings.\n"
-                "- Use bullet points (`-`) for lists.\n"
-                "- Wrap ALL mathematical expressions in LaTeX: inline math uses `$...$`, block equations use `$$...$$`.\n"
-                "- Example: The distance formula is $r = \\sqrt{x^2 + y^2}$.\n"
-                "- Example block: $$F = \\frac{k q_1 q_2}{r^2}$$\n"
-                "- Never write raw equations like r = sqrt(x^2 + y^2). Always use LaTeX.\n"
-                "- Be concise and clear."
+                "You are an expert academic tutor. Answer questions using ONLY the provided content.\n\n"
+                "RESPONSE STYLE:\n"
+                "- Write in a clear, professional academic tone\n"
+                "- Use markdown headings (## or ###) for major sections\n"
+                "- Use numbered lists for sequential steps or multiple points\n"
+                "- Use bullet points (-) for properties or features\n"
+                "- Add a blank line between every paragraph and list item group\n\n"
+                "MATH FORMATTING — CRITICAL RULES:\n"
+                "- ALWAYS write equations in LaTeX. Never write raw math like 'C = eA/d'\n"
+                "- Inline math: wrap in single dollar signs: $C = \\frac{\\epsilon A}{d}$\n"
+                "- Block/display equations: wrap in double dollar signs on their own line:\n"
+                "  $$C = \\frac{\\epsilon A}{d}$$\n"
+                "- Use display math ($$) for important standalone equations\n"
+                "- Use inline math ($) when referencing variables within sentences\n"
+                "- NEVER repeat the same equation twice\n"
+                "- NEVER mix raw text math with LaTeX in the same expression\n\n"
+                "EXAMPLE of correct format:\n"
+                "### Capacitance\n"
+                "The capacitance of a parallel plate capacitor is:\n"
+                "$$C = \\frac{\\epsilon A}{d}$$\n"
+                "where $\\epsilon$ is permittivity, $A$ is plate area, and $d$ is separation."
             ),
         },
         {
             "role": "user",
             "content": (
-                f"Page topic: {request.topic}\n"
-                f"Page content:\n{page_content}\n\n"
+                f"Topic: {request.topic}\n\n"
+                f"Content:\n{page_content}\n\n"
                 f"Question: {request.question}"
             ),
         },
