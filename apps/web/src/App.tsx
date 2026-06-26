@@ -226,7 +226,7 @@ export function App() {
       const lastMeta = results.at(-1)?.metaNode;
       setUploadNotice({
         kind: "ready",
-        message: validFiles.length === 1
+        message: validFiles.length === 1 && results[0]
           ? `${results[0].pages.length} pages added from ${results[0].name}.`
           : `${validFiles.length} files added — ${totalPages} pages total.`,
         node: lastMeta,
