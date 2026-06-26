@@ -3,6 +3,10 @@ import * as THREE from "three";
 import type { KnowledgeNode } from "@noosphere/domain";
 import { fixtureNodes } from "@noosphere/domain";
 import { ArrowLeft, BookOpen, BrainCircuit, CheckCircle2, FileText, Search, Send, Sparkles, Upload, X } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import "katex/dist/katex.min.css";
 import { KnowledgeGlobe } from "./components/KnowledgeGlobe";
 import { PdfReader } from "./components/PdfReader";
 import { listMaterials, storeMaterial, updateMaterial, type StoredMaterial } from "./lib/materialStore";
@@ -176,41 +180,55 @@ export function App() {
   }, []);
 
   const handleMaterial = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
+    const files = Array.from(event.target.files ?? []);
     event.target.value = "";
-    if (!file) return;
-    if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
-      setUploadNotice({ kind: "error", message: "Choose a PDF file." });
-      return;
-    }
-    if (file.size > 50 * 1024 * 1024) {
-      setUploadNotice({ kind: "error", message: "PDFs must be smaller than 50 MB." });
+    if (files.length === 0) return;
+
+    const validFiles = files.filter((f) => {
+      if (f.type !== "application/pdf" && !f.name.toLowerCase().endsWith(".pdf")) return false;
+      if (f.size > 50 * 1024 * 1024) return false;
+      return true;
+    });
+
+    if (validFiles.length === 0) {
+      setUploadNotice({ kind: "error", message: "Choose PDF files smaller than 50 MB." });
       return;
     }
 
-    setUploadNotice({ kind: "working", message: `Extracting searchable text from ${file.name}…` });
-    try {
+    if (validFiles.length < files.length) {
+      setUploadNotice({ kind: "error", message: `${files.length - validFiles.length} file(s) skipped — PDFs only, max 50 MB each.` });
+    }
+
+    setUploadNotice({ kind: "working", message: `Processing ${validFiles.length} file${validFiles.length > 1 ? "s" : ""}…` });
+
+    const processFile = async (file: File, fileIndex: number) => {
       const pages = await extractPdfPages(file, (status) => {
         setUploadNotice({ kind: "working", message: progressMessage(file.name, status) });
       });
       const material = await storeMaterial(file, pages);
-      const newNodes = materialNodes(material, nodes.length);
+      const newNodes = materialNodes(material, nodes.length + fileIndex);
       const metaNode = newNodes.find((node) => node.nodeKind === "macro") ?? newNodes[0];
       setNodes((current) => [...current, ...newNodes]);
       setMaterialUrls((current) => ({ ...current, [material.id]: URL.createObjectURL(material.file) }));
       setMaterialPages((current) => ({ ...current, [material.id]: pages }));
-      const searchablePages = pages.filter((page) => page.text.length > 0).length;
+      return { pages, metaNode, name: file.name };
+    };
+
+    try {
+      const results = await Promise.all(validFiles.map((f, i) => processFile(f, i)));
+      const totalPages = results.reduce((sum, r) => sum + r.pages.length, 0);
+      const lastMeta = results.at(-1)?.metaNode;
       setUploadNotice({
         kind: "ready",
-        message: searchablePages
-          ? `${pages.length} pages added; ${searchablePages} pages are content-searchable.`
-          : `${pages.length} pages added, but no selectable text was found. This PDF needs OCR.`,
-        node: metaNode
+        message: validFiles.length === 1
+          ? `${results[0].pages.length} pages added from ${results[0].name}.`
+          : `${validFiles.length} files added — ${totalPages} pages total.`,
+        node: lastMeta,
       });
     } catch (error) {
       const message = error instanceof DOMException && error.name === "QuotaExceededError"
-        ? "This browser does not have enough storage space for that PDF."
-        : "The PDF could not be saved. Check browser storage permissions and try again.";
+        ? "Not enough browser storage space."
+        : "One or more PDFs could not be saved.";
       setUploadNotice({ kind: "error", message });
     }
   };
@@ -270,7 +288,7 @@ export function App() {
       <header className="topbar">
         <a className="brand" href="#" aria-label="Noosphere home"><span className="brand-mark"><BrainCircuit size={20} /></span>noosphere</a>
         <div className="top-actions">
-          <input ref={fileInput} className="visually-hidden" type="file" accept="application/pdf,.pdf" onChange={handleMaterial} />
+          <input ref={fileInput} className="visually-hidden" type="file" accept="application/pdf,.pdf" multiple onChange={handleMaterial} />
           <button className="ghost-button" onClick={() => fileInput.current?.click()}><Upload size={16} /> Upload material</button>
           <button className="avatar" aria-label="Account">AS</button>
         </div>
@@ -508,10 +526,19 @@ function ChatPanel({
                 {message.role === "assistant" && (
                   <div className="chat-bubble-label"><Sparkles size={11} /> Page companion</div>
                 )}
-                <p>
-                  {message.text || (isStreaming ? "" : "…")}
+                <div className="chat-bubble-body">
+                  {message.role === "assistant" ? (
+                    <ReactMarkdown
+                      remarkPlugins={[remarkMath]}
+                      rehypePlugins={[rehypeKatex]}
+                    >
+                      {message.text || (isStreaming ? "​" : "…")}
+                    </ReactMarkdown>
+                  ) : (
+                    <p>{message.text}</p>
+                  )}
                   {isStreaming && <span className="chat-cursor" />}
-                </p>
+                </div>
               </div>
             );
           })
