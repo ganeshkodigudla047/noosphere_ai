@@ -18,4 +18,4 @@ COPY . .
 EXPOSE 8000
 ENV PORT=8000
 
-CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT}
+CMD ["python", "-c", "import os,subprocess,sys; subprocess.run(['uvicorn','app.main:app','--host','0.0.0.0','--port',os.environ.get('PORT','8000')], check=True)"]
