@@ -1,12 +1,12 @@
+from __future__ import annotations
+
 import asyncio
 
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
-from .ocr import OCRConfig, OCRDocumentResult, NoospherePDFOCR
 from .chat import PageChatRequest, PageChatResponse, answer_page_question, stream_page_answer
-from .pipeline import IngestionResult, ingest_pdf
 
 app = FastAPI(title="Noosphere AI Semantic Mapping API")
 
@@ -17,7 +17,6 @@ app.add_middleware(
         "http://127.0.0.1:5173",
         "http://localhost:5174",
         "http://127.0.0.1:5174",
-        # Allow all Vercel preview and production deployments
         "https://noosphere-ai.vercel.app",
     ],
     allow_origin_regex=r"https://.*\.vercel\.app",
@@ -32,7 +31,7 @@ async def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@app.post("/ingest/pdf", response_model=IngestionResult)
+@app.post("/ingest/pdf")
 async def ingest_pdf_endpoint(
     file: UploadFile = File(...),
     user_id: str = Form(...),
@@ -41,7 +40,9 @@ async def ingest_pdf_endpoint(
     radius: float = Form(default=1.0),
     ocr_if_needed: bool = Form(default=True),
     ocr_all_pages: bool = Form(default=False),
-) -> IngestionResult:
+):
+    # Lazy import to avoid slow startup
+    from .pipeline import ingest_pdf, IngestionResult  # noqa: F401
     pdf_bytes = await file.read()
     return await ingest_pdf(
         pdf_bytes=pdf_bytes,
@@ -55,12 +56,14 @@ async def ingest_pdf_endpoint(
     )
 
 
-@app.post("/ocr/pdf", response_model=OCRDocumentResult)
+@app.post("/ocr/pdf")
 async def ocr_pdf_endpoint(
     file: UploadFile = File(...),
     page_numbers: str | None = Form(default=None),
     save_preprocessed_images: bool = Form(default=False),
-) -> OCRDocumentResult:
+):
+    # Lazy import to avoid slow startup
+    from .ocr import OCRConfig, NoospherePDFOCR
     pdf_bytes = await file.read()
     pages = parse_page_numbers(page_numbers)
     engine = NoospherePDFOCR(config=OCRConfig(save_preprocessed_images=save_preprocessed_images))
@@ -80,9 +83,6 @@ async def page_chat_endpoint(request: PageChatRequest) -> PageChatResponse:
 
 
 def _sse_event(token: str) -> str:
-    # Each token is sent as a single SSE data line.
-    # Replace literal newlines with a space so the line stays intact;
-    # the frontend receives the exact token text after stripping "data: ".
     return f"data: {token.replace(chr(10), ' ').replace(chr(13), '')}\n\n"
 
 
