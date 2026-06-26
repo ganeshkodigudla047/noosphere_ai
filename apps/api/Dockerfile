@@ -5,7 +5,7 @@ WORKDIR /app
 # Install system dependencies for OpenCV and PyMuPDF
 RUN apt-get update && apt-get install -y \
     libglib2.0-0 \
-    libgl1-mesa-glx \
+    libgl1 \
     libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
@@ -18,4 +18,4 @@ COPY . .
 
 # Expose port and start
 ENV PORT=8000
-CMD uvicorn app.main:app --host 0.0.0.0 --port $PORT
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port $PORT"]
