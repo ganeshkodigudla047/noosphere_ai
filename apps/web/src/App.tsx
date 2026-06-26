@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, ty
 import * as THREE from "three";
 import type { KnowledgeNode } from "@noosphere/domain";
 import { fixtureNodes } from "@noosphere/domain";
-import { ArrowLeft, BookOpen, BrainCircuit, CheckCircle2, FileText, Search, Send, Sparkles, Upload, X } from "lucide-react";
+import { ArrowLeft, BookOpen, BrainCircuit, CheckCircle2, FileText, Moon, Search, Send, Sparkles, Sun, Upload, X } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
@@ -26,9 +26,15 @@ export function App() {
   const [materialUrls, setMaterialUrls] = useState<Record<string, string>>({});
   const [materialPages, setMaterialPages] = useState<Record<string, StoredMaterial["pages"]>>({});
   const [orbitEnabled, setOrbitEnabled] = useState(true);
+  const [darkMode, setDarkMode] = useState(true);
   const fileInput = useRef<HTMLInputElement>(null);
   const focusTimer = useRef<number | undefined>(undefined);
   const result = useMemo(() => findNode(nodes, query), [nodes, query]);
+
+  // Apply theme to document root
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", darkMode ? "dark" : "light");
+  }, [darkMode]);
 
   const focusAndOpen = useCallback((node: KnowledgeNode) => {
     window.clearTimeout(focusTimer.current);
@@ -248,6 +254,9 @@ export function App() {
           <div className="location-card">
             <span>{selected.subject}</span><strong>{selected.label}</strong><small>Page {selected.pageNumber}</small>
           </div>
+          <button className="ghost-button theme-toggle" onClick={() => setDarkMode((d) => !d)} aria-label="Toggle theme" style={{ marginTop: "auto" }}>
+            {darkMode ? <Sun size={16} /> : <Moon size={16} />}
+          </button>
         </aside>
 
         <article className="document-panel">
@@ -278,6 +287,7 @@ export function App() {
           error={chatError}
           onInputFocus={() => setOrbitEnabled(false)}
           onInputBlur={() => setOrbitEnabled(true)}
+          darkMode={darkMode}
         />
       </main>
     );
@@ -290,6 +300,9 @@ export function App() {
         <div className="top-actions">
           <input ref={fileInput} className="visually-hidden" type="file" accept="application/pdf,.pdf" multiple onChange={handleMaterial} />
           <button className="ghost-button" onClick={() => fileInput.current?.click()}><Upload size={16} /> Upload material</button>
+          <button className="ghost-button theme-toggle" onClick={() => setDarkMode((d) => !d)} aria-label="Toggle theme">
+            {darkMode ? <Sun size={16} /> : <Moon size={16} />}
+          </button>
           <button className="avatar" aria-label="Account">AS</button>
         </div>
       </header>
@@ -481,6 +494,7 @@ function ChatPanel({
   error,
   onInputFocus,
   onInputBlur,
+  darkMode,
 }: {
   open: boolean;
   onClose: () => void;
@@ -493,24 +507,35 @@ function ChatPanel({
   error?: string;
   onInputFocus?: () => void;
   onInputBlur?: () => void;
+  darkMode?: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const messagesRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll to bottom whenever messages update (like ChatGPT)
+  // Auto-scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  // Block wheel events from reaching the canvas/OrbitControls
+  useEffect(() => {
+    const el = messagesRef.current;
+    if (!el) return;
+    const stop = (e: WheelEvent) => e.stopPropagation();
+    el.addEventListener("wheel", stop, { passive: false });
+    return () => el.removeEventListener("wheel", stop);
+  }, []);
+
   return (
-    <aside className={`chat-panel ${open ? "is-open" : ""}`}>
+    <aside className={`chat-panel ${open ? "is-open" : ""} ${darkMode ? "chat-dark" : "chat-light"}`}>
       <button className="sheet-handle" onClick={onClose} aria-label="Close chat" />
       <div className="chat-heading">
         <span><Sparkles size={18} /></span>
         <div><strong>Page companion</strong><small>Grounded in this page</small></div>
       </div>
 
-      <div className="chat-messages">
+      <div className="chat-messages" ref={messagesRef}>
         {messages.length === 0 ? (
           <div className="chat-empty">
             <BrainCircuit size={28} />
@@ -528,10 +553,7 @@ function ChatPanel({
                 )}
                 <div className="chat-bubble-body">
                   {message.role === "assistant" ? (
-                    <ReactMarkdown
-                      remarkPlugins={[remarkMath]}
-                      rehypePlugins={[rehypeKatex]}
-                    >
+                    <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
                       {message.text || (isStreaming ? "​" : "…")}
                     </ReactMarkdown>
                   ) : (
@@ -547,10 +569,7 @@ function ChatPanel({
         <div ref={messagesEndRef} />
       </div>
 
-      <form
-        className="chat-input"
-        onSubmit={(e) => { e.preventDefault(); if (!loading) onSend(input); }}
-      >
+      <form className="chat-input" onSubmit={(e) => { e.preventDefault(); if (!loading) onSend(input); }}>
         <input
           ref={inputRef}
           value={input}
