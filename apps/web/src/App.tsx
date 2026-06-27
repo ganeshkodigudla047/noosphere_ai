@@ -19,9 +19,22 @@ export function App() {
   const [query, setQuery] = useState("");
   const [chatOpen, setChatOpen] = useState(false);
   const [chatInput, setChatInput] = useState("");
-  const [chatMessages, setChatMessages] = useState<Array<{ role: "user" | "assistant"; text: string }>>([]);
+  // Per-node chat history — keyed by node ID so each node keeps its own conversation
+  const [allChatMessages, setAllChatMessages] = useState<Record<string, Array<{ role: "user" | "assistant"; text: string }>>>({});
   const [chatLoading, setChatLoading] = useState(false);
   const [chatError, setChatError] = useState<string | undefined>();
+
+  // Derived: messages for the currently selected node
+  const chatMessages = selected ? (allChatMessages[selected.id] ?? []) : [];
+  const setChatMessages = (updater: Array<{ role: "user" | "assistant"; text: string }> | ((prev: Array<{ role: "user" | "assistant"; text: string }>) => Array<{ role: "user" | "assistant"; text: string }>>) => {
+    if (!selected) return;
+    const nodeId = selected.id;
+    setAllChatMessages((prev) => {
+      const current = prev[nodeId] ?? [];
+      const next = typeof updater === "function" ? updater(current) : updater;
+      return { ...prev, [nodeId]: next };
+    });
+  };
   const [uploadNotice, setUploadNotice] = useState<UploadNotice>();
   const [materialUrls, setMaterialUrls] = useState<Record<string, string>>({});
   const [materialPages, setMaterialPages] = useState<Record<string, StoredMaterial["pages"]>>({});
@@ -148,7 +161,6 @@ export function App() {
   }, [selected]);
 
   useEffect(() => {
-    setChatMessages([]);
     setChatInput("");
     setChatError(undefined);
     setChatLoading(false);
