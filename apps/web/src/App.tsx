@@ -553,7 +553,10 @@ function ChatPanel({
   }, []);
 
   return (
-    <aside className={`chat-panel ${open ? "is-open" : ""} ${darkMode ? "chat-dark" : "chat-light"}`}>
+    <aside
+      className={`chat-panel ${open ? "is-open" : ""} ${darkMode ? "chat-dark" : "chat-light"}`}
+      onKeyDown={(e) => e.stopPropagation()}
+    >
       <button className="sheet-handle" onClick={onClose} aria-label="Close chat" />
       <div className="chat-heading">
         <span><Sparkles size={18} /></span>
@@ -605,6 +608,7 @@ function ChatPanel({
           onFocus={onInputFocus}
           onBlur={onInputBlur}
           onKeyDown={(e) => {
+            e.stopPropagation(); // prevent keystrokes from leaking to globe/canvas
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
               if (!loading && input.trim()) onSend(input);
@@ -614,6 +618,7 @@ function ChatPanel({
           disabled={loading}
           aria-label="Chat question"
           autoComplete="off"
+          tabIndex={0}
         />
         <button type="submit" aria-label="Send" disabled={loading || !input.trim()}>
           {loading ? <span className="chat-spinner" /> : <Send size={16} />}
