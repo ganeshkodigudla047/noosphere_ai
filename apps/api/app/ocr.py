@@ -16,26 +16,23 @@ from pydantic import BaseModel
 
 from .config import GROQ_API_KEY
 
-# Use Groq's vision model — free tier, supports image inputs
+# Llama 3.2 90B Vision — best available on Groq for handwriting/OCR
 GROQ_BASE_URL = "https://api.groq.com/openai/v1"
-OCR_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
-OCR_DPI = 300
+OCR_MODEL = "llama-3.2-90b-vision-preview"
+OCR_DPI = 400          # Higher DPI = finer handwriting detail preserved
 OCR_TEMPERATURE = 0.0
 OCR_MAX_RETRIES = 3
 
-OCR_SYSTEM_PROMPT = """You are an expert OCR and handwriting transcription engine for academic study materials.
-
-Extract every visible written element from the image with maximum literal accuracy.
+OCR_SYSTEM_PROMPT = """You are the world's best handwriting transcription engine. Your job is to read handwritten notes with perfect accuracy.
 
 Rules:
-- Transcribe handwritten, printed, cursive, and mixed text exactly as written.
-- Preserve reading order from top-to-bottom and left-to-right.
-- Preserve headings, bullets, numbering, tables, labels, and diagrams when possible.
-- Convert mathematical notation and equations into clean Markdown/LaTeX.
-- Use Markdown structure only; do not add commentary about the image.
-- If a word is uncertain, mark it as [unclear: possible_text].
-- Do not hallucinate missing text.
-- Do not summarize. Return only the extracted page content.
+- Transcribe EVERY word exactly as written — cursive, print, mixed, or messy.
+- Preserve the original structure: headings, bullet points, numbered lists, underlines.
+- For mathematical expressions, output clean LaTeX: inline $...$ or block $$...$$.
+- If a word is genuinely illegible, write [?] at that position.
+- Do NOT paraphrase, summarize, or skip anything.
+- Do NOT add commentary about the handwriting quality.
+- Output only the transcribed content in Markdown format.
 """
 
 
@@ -196,10 +193,26 @@ def preprocess_page_image(rgb_image: np.ndarray) -> np.ndarray:
         raise OCRPipelineError("Rasterized page image is empty")
 
     gray = cv2.cvtColor(rgb_image, cv2.COLOR_RGB2GRAY)
+
+    # Sharpen — critical for cursive handwriting fine strokes
+    kernel_sharpen = np.array([[-1, -1, -1],
+                                [-1,  9, -1],
+                                [-1, -1, -1]])
+    sharpened = cv2.filter2D(gray, -1, kernel_sharpen)
+
+    # Blend original with sharpened for controlled enhancement
+    gray = cv2.addWeighted(gray, 0.5, sharpened, 0.5, 0)
+
+    # Denoise while preserving edges
     blurred = cv2.medianBlur(gray, 3)
 
+    # CLAHE for local contrast enhancement (handles uneven page lighting)
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    enhanced = clahe.apply(blurred)
+
+    # Adaptive thresholding
     thresh = cv2.adaptiveThreshold(
-        blurred,
+        enhanced,
         255,
         cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
         cv2.THRESH_BINARY_INV,
@@ -207,14 +220,16 @@ def preprocess_page_image(rgb_image: np.ndarray) -> np.ndarray:
         9,
     )
 
-    horizontal_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (35, 1))
+    # Remove horizontal notebook ruling lines
+    horizontal_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (40, 1))
     detected_lines = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, horizontal_kernel, iterations=2)
-
     cleaned_binary = cv2.subtract(thresh, detected_lines)
 
+    # Repair broken character strokes (essential for cursive)
     repair_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (1, 6))
     repaired_binary = cv2.morphologyEx(cleaned_binary, cv2.MORPH_CLOSE, repair_kernel)
 
+    # Return black text on white background
     return cv2.bitwise_not(repaired_binary)
 
 
