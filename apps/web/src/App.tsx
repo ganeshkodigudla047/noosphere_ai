@@ -67,7 +67,25 @@ export function App() {
     document.documentElement.setAttribute("data-theme", darkMode ? "dark" : "light");
   }, [darkMode]);
 
-  const focusAndOpen = useCallback((node: KnowledgeNode) => {
+  // Auto-focus chat input: any printable keypress goes to chat input when on focus layout
+  const chatInputRef = useRef<HTMLInputElement | null>(null);
+  useEffect(() => {
+    if (!selected) return; // only active on focus layout
+    const handleKey = (e: KeyboardEvent) => {
+      if (!chatInputRef.current) return;
+      if (chatLoading) return;
+      if (document.activeElement === chatInputRef.current) return;
+      const tag = (document.activeElement as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA") return;
+      if (e.key.length !== 1 || e.ctrlKey || e.metaKey || e.altKey) return;
+      e.preventDefault();
+      e.stopPropagation();
+      chatInputRef.current.focus();
+      setChatInput((prev) => prev + e.key);
+    };
+    document.addEventListener("keydown", handleKey, { capture: true });
+    return () => document.removeEventListener("keydown", handleKey, { capture: true });
+  }, [selected, chatLoading]);
     window.clearTimeout(focusTimer.current);
     setFocusedNode(node);
     focusTimer.current = window.setTimeout(() => {
@@ -314,6 +332,7 @@ export function App() {
           onInputFocus={() => setOrbitEnabled(false)}
           onInputBlur={() => setOrbitEnabled(true)}
           darkMode={darkMode}
+          inputRef={chatInputRef}
         />
       </main>
     );
@@ -536,6 +555,7 @@ function ChatPanel({
   onInputFocus,
   onInputBlur,
   darkMode,
+  inputRef: externalInputRef,
 }: {
   open: boolean;
   onClose: () => void;
@@ -549,39 +569,17 @@ function ChatPanel({
   onInputFocus?: () => void;
   onInputBlur?: () => void;
   darkMode?: boolean;
+  inputRef?: React.MutableRefObject<HTMLInputElement | null>;
 }) {
-  const inputRef = useRef<HTMLInputElement>(null);
+  const internalRef = useRef<HTMLInputElement>(null);
+  const inputRef = (externalInputRef ?? internalRef) as React.RefObject<HTMLInputElement>;
   const messagesRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  // Keep a stable ref to onInputChange so the keydown handler doesn't go stale
-  const onInputChangeRef = useRef(onInputChange);
-  useEffect(() => { onInputChangeRef.current = onInputChange; }, [onInputChange]);
-  const inputValueRef = useRef(input);
-  useEffect(() => { inputValueRef.current = input; }, [input]);
 
   // Auto-scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
-
-  // Auto-focus: any printable keypress routes to the input field
-  useEffect(() => {
-    const handleKey = (e: KeyboardEvent) => {
-      const inputEl = inputRef.current;
-      if (!inputEl) return;
-      if (document.activeElement === inputEl) return;
-      const tag = (document.activeElement as HTMLElement)?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA") return;
-      if (e.key.length !== 1 || e.ctrlKey || e.metaKey || e.altKey) return;
-      e.preventDefault();
-      e.stopPropagation();
-      inputEl.focus();
-      // Update React state directly via the prop callback
-      onInputChangeRef.current(inputValueRef.current + e.key);
-    };
-    document.addEventListener("keydown", handleKey, { capture: true });
-    return () => document.removeEventListener("keydown", handleKey, { capture: true });
-  }, []);
 
   // Block wheel events from reaching the canvas/OrbitControls
   useEffect(() => {
@@ -648,7 +646,7 @@ function ChatPanel({
           onFocus={onInputFocus}
           onBlur={onInputBlur}
           onKeyDown={(e) => {
-            e.stopPropagation(); // prevent keystrokes from leaking to globe/canvas
+            e.stopPropagation();
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
               if (!loading && input.trim()) onSend(input);
