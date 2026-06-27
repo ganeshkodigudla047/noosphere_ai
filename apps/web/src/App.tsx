@@ -22,8 +22,15 @@ export function App() {
   const [query, setQuery] = useState("");
   const [chatOpen, setChatOpen] = useState(false);
   const [chatInput, setChatInput] = useState("");
-  // Per-node chat history — keyed by node ID so each node keeps its own conversation
-  const [allChatMessages, setAllChatMessages] = useState<Record<string, ChatMessage[]>>({});
+  // Per-node chat history — persisted in localStorage so it survives page refresh
+  const [allChatMessages, setAllChatMessages] = useState<Record<string, ChatMessage[]>>(() => {
+    try {
+      const saved = localStorage.getItem("noosphere-chat-history");
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
   const [chatLoading, setChatLoading] = useState(false);
   const [chatError, setChatError] = useState<string | undefined>();
 
@@ -45,6 +52,15 @@ export function App() {
   const fileInput = useRef<HTMLInputElement>(null);
   const focusTimer = useRef<number | undefined>(undefined);
   const result = useMemo(() => findNode(nodes, query), [nodes, query]);
+
+  // Persist chat history to localStorage on every update
+  useEffect(() => {
+    try {
+      localStorage.setItem("noosphere-chat-history", JSON.stringify(allChatMessages));
+    } catch {
+      // Storage quota exceeded — silently ignore
+    }
+  }, [allChatMessages]);
 
   // Apply theme to document root
   useEffect(() => {
