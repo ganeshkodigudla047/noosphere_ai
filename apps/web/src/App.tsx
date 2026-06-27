@@ -86,6 +86,8 @@ export function App() {
     document.addEventListener("keydown", handleKey, { capture: true });
     return () => document.removeEventListener("keydown", handleKey, { capture: true });
   }, [selected, chatLoading]);
+
+  const focusAndOpen = useCallback((node: KnowledgeNode) => {
     window.clearTimeout(focusTimer.current);
     setFocusedNode(node);
     focusTimer.current = window.setTimeout(() => {
