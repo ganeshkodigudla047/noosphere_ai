@@ -1,6 +1,5 @@
 import { pdfjs } from "react-pdf";
 import pdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
-import { createWorker, OEM, type Worker } from "tesseract.js";
 import type { StoredPage } from "./materialStore";
 
 pdfjs.GlobalWorkerOptions.workerSrc = pdfWorker;
@@ -12,54 +11,92 @@ export type PdfIndexProgress = {
   progress?: number;
 };
 
-export async function extractPdfPages(file: Blob, onProgress?: (status: PdfIndexProgress) => void): Promise<StoredPage[]> {
+const API_BASE = (import.meta as any).env?.VITE_API_URL ?? "http://127.0.0.1:8000";
+
+/**
+ * Extract text from a PDF.
+ *
+ * Strategy:
+ * 1. Try pdfjs native text extraction (fast, works for digital PDFs).
+ * 2. For pages with no selectable text (scanned / handwritten), call the
+ *    backend /ocr/pdf endpoint which uses PyMuPDF at 300 DPI + OpenCV
+ *    preprocessing + GPT-4o Vision — far superior to Tesseract.js.
+ */
+export async function extractPdfPages(
+  file: Blob,
+  onProgress?: (status: PdfIndexProgress) => void,
+): Promise<StoredPage[]> {
   const data = await file.arrayBuffer();
   const document = await pdfjs.getDocument({ data }).promise;
   const pages: StoredPage[] = [];
-  let ocrWorker: Worker | undefined;
-  let activeOcrPage = 1;
+  const lowTextPages: number[] = [];
 
-  try {
-    for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
-      onProgress?.({ phase: "extracting", page: pageNumber, pageCount: document.numPages });
-      const page = await document.getPage(pageNumber);
-      const content = await page.getTextContent();
-      let text = normalizeText(content.items.map((item) => ("str" in item ? item.str : "")).join(" "));
+  // Pass 1: native text extraction
+  for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
+    onProgress?.({ phase: "extracting", page: pageNumber, pageCount: document.numPages });
+    const page = await document.getPage(pageNumber);
+    const content = await page.getTextContent();
+    const text = normalizeText(
+      content.items.map((item) => ("str" in item ? item.str : "")).join(" "),
+    );
+    pages.push({ pageNumber, text, title: derivePageTitle(text, pageNumber) });
+    if (text.length < 30) {
+      lowTextPages.push(pageNumber);
+    }
+  }
 
-      if (text.length < 24) {
-        activeOcrPage = pageNumber;
-        onProgress?.({ phase: "ocr", page: pageNumber, pageCount: document.numPages, progress: 0 });
-        ocrWorker ??= await createWorker("eng", OEM.LSTM_ONLY, {
-          logger: (message) => {
-            if (message.status === "recognizing text") {
-              onProgress?.({ phase: "ocr", page: activeOcrPage, pageCount: document.numPages, progress: message.progress });
-            }
+  // Pass 2: backend OCR for pages with no selectable text
+  if (lowTextPages.length > 0) {
+    try {
+      onProgress?.({
+        phase: "ocr",
+        page: lowTextPages[0]!,
+        pageCount: document.numPages,
+        progress: 0,
+      });
+
+      const formData = new FormData();
+      formData.append("file", file, (file as File).name ?? "material.pdf");
+      formData.append("page_numbers", lowTextPages.join(","));
+
+      const response = await fetch(`${API_BASE}/ocr/pdf`, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        const ocrByPage: Record<number, string> = {};
+        for (const p of result.pages ?? []) {
+          if (p.markdown && !p.markdown.startsWith("[OCR failed")) {
+            ocrByPage[p.page_number] = normalizeText(p.markdown);
           }
-        });
-        const viewport = page.getViewport({ scale: 1.65 });
-        const canvas = documentOwnerCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
-        const context = canvas.getContext("2d", { alpha: false });
-        if (context) {
-          await page.render({ canvas, canvasContext: context, viewport }).promise;
-          const result = await ocrWorker.recognize(canvas);
-          text = normalizeText(result.data.text);
+        }
+
+        for (let i = 0; i < pages.length; i++) {
+          const p = pages[i]!;
+          if (ocrByPage[p.pageNumber]) {
+            const ocrText = ocrByPage[p.pageNumber]!;
+            pages[i] = {
+              pageNumber: p.pageNumber,
+              text: ocrText,
+              title: derivePageTitle(ocrText, p.pageNumber),
+            };
+            onProgress?.({
+              phase: "ocr",
+              page: p.pageNumber,
+              pageCount: document.numPages,
+              progress: lowTextPages.indexOf(p.pageNumber) / lowTextPages.length,
+            });
+          }
         }
       }
-
-      pages.push({ pageNumber, text, title: derivePageTitle(text, pageNumber) });
+    } catch {
+      // Backend OCR failed — pages keep whatever text was extracted natively
     }
-  } finally {
-    await ocrWorker?.terminate();
   }
 
   return pages;
-}
-
-function documentOwnerCanvas(width: number, height: number) {
-  const canvas = window.document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
-  return canvas;
 }
 
 function normalizeText(text: string) {

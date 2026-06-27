@@ -14,10 +14,14 @@ import numpy as np
 from openai import APIConnectionError, APIStatusError, OpenAI, RateLimitError
 from pydantic import BaseModel
 
-OCR_MODEL = "gpt-4o"
+from .config import GROQ_API_KEY
+
+# Use Groq's vision model — free tier, supports image inputs
+GROQ_BASE_URL = "https://api.groq.com/openai/v1"
+OCR_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct"
 OCR_DPI = 300
 OCR_TEMPERATURE = 0.0
-OCR_MAX_RETRIES = 4
+OCR_MAX_RETRIES = 3
 
 OCR_SYSTEM_PROMPT = """You are an expert OCR and handwriting transcription engine for academic study materials.
 
@@ -63,7 +67,10 @@ class OCRConfig:
 class NoospherePDFOCR:
     def __init__(self, config: OCRConfig | None = None, client: OpenAI | None = None) -> None:
         self.config = config or OCRConfig()
-        self.client = client or OpenAI()
+        self.client = client or OpenAI(
+            api_key=GROQ_API_KEY,
+            base_url=GROQ_BASE_URL,
+        )
 
     def transcribe_pdf_bytes(
         self,
