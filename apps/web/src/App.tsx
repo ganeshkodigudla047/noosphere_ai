@@ -26,15 +26,17 @@ export function App() {
 
   // Derived: messages for the currently selected node
   const chatMessages = selected ? (allChatMessages[selected.id] ?? []) : [];
-  const setChatMessages = (updater: Array<{ role: "user" | "assistant"; text: string }> | ((prev: Array<{ role: "user" | "assistant"; text: string }>) => Array<{ role: "user" | "assistant"; text: string }>>) => {
-    if (!selected) return;
-    const nodeId = selected.id;
+
+  const setChatMessages = useCallback((
+    updater: Array<{ role: "user" | "assistant"; text: string }> | ((prev: Array<{ role: "user" | "assistant"; text: string }>) => Array<{ role: "user" | "assistant"; text: string }>>,
+    nodeId: string
+  ) => {
     setAllChatMessages((prev) => {
       const current = prev[nodeId] ?? [];
       const next = typeof updater === "function" ? updater(current) : updater;
       return { ...prev, [nodeId]: next };
     });
-  };
+  }, []);
   const [uploadNotice, setUploadNotice] = useState<UploadNotice>();
   const [materialUrls, setMaterialUrls] = useState<Record<string, string>>({});
   const [materialPages, setMaterialPages] = useState<Record<string, StoredMaterial["pages"]>>({});
@@ -62,6 +64,7 @@ export function App() {
     if (!selected) return;
     const trimmed = question.trim();
     if (!trimmed) return;
+    const nodeId = selected.id;
 
     // Build full content from actual stored pages for this chunk's page range
     const pages = materialPages[selected.documentId] ?? [];
@@ -82,7 +85,7 @@ export function App() {
       ...prev,
       { role: "user", text: trimmed },
       { role: "assistant", text: "" },
-    ]);
+    ], nodeId);
 
     try {
       const API_BASE = import.meta.env.VITE_API_URL ?? "http://127.0.0.1:8000";
@@ -91,7 +94,7 @@ export function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           document_id: selected.documentId ?? "unknown",
-          node_id: selected.id,
+          node_id: nodeId,
           topic: selected.label,
           summary: selected.summary,
           content: fullContent,
@@ -114,16 +117,13 @@ export function App() {
 
         buffer += decoder.decode(value, { stream: true });
 
-        // Process all complete SSE messages (split on double newline)
         const parts = buffer.split("\n\n");
-        // Keep the last incomplete part in the buffer
         buffer = parts.pop() ?? "";
 
         for (const part of parts) {
           const line = part.trim();
           if (!line.startsWith("data:")) continue;
 
-          // slice "data:" then remove only a single leading space (preserve internal spaces)
           const raw = line.slice(5);
           const token = raw.startsWith(" ") ? raw.slice(1) : raw;
           if (token === "[DONE]") break;
@@ -132,7 +132,6 @@ export function App() {
           }
           if (!token) continue;
 
-          // Append token to the last assistant message
           setChatMessages((prev) => {
             const updated = [...prev];
             const last = updated[updated.length - 1];
@@ -140,13 +139,12 @@ export function App() {
               updated[updated.length - 1] = { role: "assistant", text: last.text + token };
             }
             return updated;
-          });
+          }, nodeId);
         }
       }
     } catch (error) {
       const msg = error instanceof Error ? error.message : "Unable to get an answer right now.";
       setChatError(msg);
-      // Remove the empty assistant placeholder on error
       setChatMessages((prev) => {
         const updated = [...prev];
         const last = updated[updated.length - 1];
@@ -154,11 +152,11 @@ export function App() {
           updated.pop();
         }
         return updated;
-      });
+      }, nodeId);
     } finally {
       setChatLoading(false);
     }
-  }, [selected]);
+  }, [selected, materialPages, setChatMessages]);
 
   useEffect(() => {
     setChatInput("");
