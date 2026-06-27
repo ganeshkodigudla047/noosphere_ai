@@ -12,6 +12,9 @@ import { PdfReader } from "./components/PdfReader";
 import { listMaterials, storeMaterial, updateMaterial, type StoredMaterial } from "./lib/materialStore";
 import { extractPdfPages } from "./lib/pdfIndex";
 
+type ChatMessage = { role: "user" | "assistant"; text: string };
+type ChatUpdater = ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[]);
+
 export function App() {
   const [nodes, setNodes] = useState<KnowledgeNode[]>([...fixtureNodes]);
   const [selected, setSelected] = useState<KnowledgeNode>();
@@ -20,17 +23,14 @@ export function App() {
   const [chatOpen, setChatOpen] = useState(false);
   const [chatInput, setChatInput] = useState("");
   // Per-node chat history — keyed by node ID so each node keeps its own conversation
-  const [allChatMessages, setAllChatMessages] = useState<Record<string, Array<{ role: "user" | "assistant"; text: string }>>>({});
+  const [allChatMessages, setAllChatMessages] = useState<Record<string, ChatMessage[]>>({});
   const [chatLoading, setChatLoading] = useState(false);
   const [chatError, setChatError] = useState<string | undefined>();
 
   // Derived: messages for the currently selected node
   const chatMessages = selected ? (allChatMessages[selected.id] ?? []) : [];
 
-  const setChatMessages = useCallback((
-    updater: Array<{ role: "user" | "assistant"; text: string }> | ((prev: Array<{ role: "user" | "assistant"; text: string }>) => Array<{ role: "user" | "assistant"; text: string }>>,
-    nodeId: string
-  ) => {
+  const setChatMessages = useCallback((updater: ChatUpdater, nodeId: string) => {
     setAllChatMessages((prev) => {
       const current = prev[nodeId] ?? [];
       const next = typeof updater === "function" ? updater(current) : updater;
