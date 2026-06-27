@@ -537,24 +537,34 @@ function ChatPanel({
   const inputRef = useRef<HTMLInputElement>(null);
   const messagesRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  // Keep a stable ref to onInputChange so the keydown handler doesn't go stale
+  const onInputChangeRef = useRef(onInputChange);
+  useEffect(() => { onInputChangeRef.current = onInputChange; }, [onInputChange]);
+  const inputValueRef = useRef(input);
+  useEffect(() => { inputValueRef.current = input; }, [input]);
 
   // Auto-scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Auto-focus input when user starts typing anywhere in the chat panel
+  // Auto-focus: any printable keypress routes to the input field
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
-      if (!inputRef.current) return;
-      if (document.activeElement === inputRef.current) return;
-      // Only trigger on printable keys (not modifier keys, arrows, etc.)
-      if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
-        inputRef.current.focus();
-      }
+      const inputEl = inputRef.current;
+      if (!inputEl) return;
+      if (document.activeElement === inputEl) return;
+      const tag = (document.activeElement as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA") return;
+      if (e.key.length !== 1 || e.ctrlKey || e.metaKey || e.altKey) return;
+      e.preventDefault();
+      e.stopPropagation();
+      inputEl.focus();
+      // Update React state directly via the prop callback
+      onInputChangeRef.current(inputValueRef.current + e.key);
     };
-    window.addEventListener("keydown", handleKey);
-    return () => window.removeEventListener("keydown", handleKey);
+    document.addEventListener("keydown", handleKey, { capture: true });
+    return () => document.removeEventListener("keydown", handleKey, { capture: true });
   }, []);
 
   // Block wheel events from reaching the canvas/OrbitControls
