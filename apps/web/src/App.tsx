@@ -543,6 +543,20 @@ function ChatPanel({
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  // Auto-focus input when user starts typing anywhere in the chat panel
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (!inputRef.current) return;
+      if (document.activeElement === inputRef.current) return;
+      // Only trigger on printable keys (not modifier keys, arrows, etc.)
+      if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        inputRef.current.focus();
+      }
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, []);
+
   // Block wheel events from reaching the canvas/OrbitControls
   useEffect(() => {
     const el = messagesRef.current;
