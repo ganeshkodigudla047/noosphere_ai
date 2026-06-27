@@ -482,6 +482,21 @@ function semanticFallbackPosition(text: string, documentIndex: number, chunkInde
     .toArray() as [number, number, number];
 }
 
+// Strip the plain-text duplicate that the LLM sometimes emits right after a LaTeX block.
+// Pattern: $...$ followed immediately by the same expression in unicode/plain text.
+// e.g. "$\rho = \sqrt{x^2+y^2}$ ρ=√(x²+y²)" → "$\rho = \sqrt{x^2+y^2}$"
+function cleanMathDuplicates(text: string): string {
+  // Remove unicode math chars that appear after a closing $ or $$ (within 60 chars)
+  // This catches the LLM pattern of writing LaTeX then raw unicode side-by-side
+  return text
+    // Remove duplicate inline: "$expr$ rawExpr" where rawExpr has math-like chars
+    .replace(/(\$[^$\n]+?\$)\s*[^\s$\n]*[\u03B1-\u03C9\u03B1-\u03C9²³√∫∇×·⁻⁰¹²³⁴⁵⁶⁷⁸⁹][^\n$]*/g, '$1')
+    // Remove duplicate display: "$$\nexpr\n$$\n rawExpr"
+    .replace(/(\$\$[\s\S]+?\$\$)\s*[^\s$\n]*[\u03B1-\u03C9²³√∫∇×·][^\n$]*/g, '$1')
+    // Remove repeated coordinates/vars like "(ρ,ϕ,z)(ρ,ϕ,z)"
+    .replace(/(\([^)]+\))\1/g, '$1');
+}
+
 function ChatPanel({
   open,
   onClose,
@@ -553,8 +568,11 @@ function ChatPanel({
                 )}
                 <div className="chat-bubble-body">
                   {message.role === "assistant" ? (
-                    <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
-                      {message.text || (isStreaming ? "​" : "…")}
+                    <ReactMarkdown
+                      remarkPlugins={[remarkMath]}
+                      rehypePlugins={[[rehypeKatex, { throwOnError: false, strict: false }]]}
+                    >
+                      {cleanMathDuplicates(message.text || (isStreaming ? "\u200b" : "…"))}
                     </ReactMarkdown>
                   ) : (
                     <p>{message.text}</p>
