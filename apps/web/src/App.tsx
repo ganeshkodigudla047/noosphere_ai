@@ -391,7 +391,13 @@ export function App() {
 
       <form className="search-bar" onSubmit={submitSearch}>
         <Search size={20} />
-        <input ref={searchInputRef} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Find a topic, page, or idea…" aria-label="Search knowledge" />
+        <input
+          ref={searchInputRef}
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Find a topic, page, or idea..."
+          aria-label="Search knowledge"
+        />
         <kbd>↵</kbd>
         {query && result && <div className="search-hint search-match"><strong>{result.label}</strong><span>Press Enter to fly to this node</span></div>}
         {query && !result && <div className="search-hint">No match yet. Try “mitosis”, “Newton”, “complexity”, or an uploaded filename.</div>}
