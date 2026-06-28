@@ -116,15 +116,6 @@ export function App() {
     return () => document.removeEventListener("keydown", handleKey, { capture: true });
   }, [selected, chatLoading]);
 
-  const focusAndOpen = useCallback((node: KnowledgeNode) => {
-    window.clearTimeout(focusTimer.current);
-    setFocusedNode(node);
-    focusTimer.current = window.setTimeout(() => {
-      setSelected(node);
-      setFocusedNode(undefined);
-    }, 1350);
-  }, []);
-
   const sendPageQuestion = useCallback(async (question: string) => {
     if (!selected) return;
     const trimmed = question.trim();
