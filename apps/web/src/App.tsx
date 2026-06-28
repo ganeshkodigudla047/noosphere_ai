@@ -67,8 +67,27 @@ export function App() {
     document.documentElement.setAttribute("data-theme", darkMode ? "dark" : "light");
   }, [darkMode]);
 
-  // Auto-focus chat input: any printable keypress goes to chat input when on focus layout
-  const chatInputRef = useRef<HTMLInputElement | null>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Auto-focus search bar: any printable keypress on the globe page goes to search
+  useEffect(() => {
+    if (selected) return; // only on globe page, not focus layout
+    const handleKey = (e: KeyboardEvent) => {
+      if (!searchInputRef.current) return;
+      if (document.activeElement === searchInputRef.current) return;
+      const tag = (document.activeElement as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA") return;
+      if (e.key.length !== 1 || e.ctrlKey || e.metaKey || e.altKey) return;
+      e.preventDefault();
+      e.stopPropagation();
+      searchInputRef.current.focus();
+      setQuery((prev) => prev + e.key);
+    };
+    document.addEventListener("keydown", handleKey, { capture: true });
+    return () => document.removeEventListener("keydown", handleKey, { capture: true });
+  }, [selected]);
+
+  const focusAndOpen = useCallback((node: KnowledgeNode) => {
   useEffect(() => {
     if (!selected) return; // only active on focus layout
     const handleKey = (e: KeyboardEvent) => {
@@ -362,7 +381,7 @@ export function App() {
 
       <form className="search-bar" onSubmit={submitSearch}>
         <Search size={20} />
-        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Find a topic, page, or idea…" aria-label="Search knowledge" />
+        <input ref={searchInputRef} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Find a topic, page, or idea…" aria-label="Search knowledge" />
         <kbd>↵</kbd>
         {query && result && <div className="search-hint search-match"><strong>{result.label}</strong><span>Press Enter to fly to this node</span></div>}
         {query && !result && <div className="search-hint">No match yet. Try “mitosis”, “Newton”, “complexity”, or an uploaded filename.</div>}
