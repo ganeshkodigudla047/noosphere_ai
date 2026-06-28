@@ -88,6 +88,16 @@ export function App() {
   }, [selected]);
 
   const focusAndOpen = useCallback((node: KnowledgeNode) => {
+    window.clearTimeout(focusTimer.current);
+    setFocusedNode(node);
+    focusTimer.current = window.setTimeout(() => {
+      setSelected(node);
+      setFocusedNode(undefined);
+    }, 1350);
+  }, []);
+
+  // Auto-focus chat input: any printable keypress goes to chat input when on focus layout
+  const chatInputRef = useRef<HTMLInputElement | null>(null);
   useEffect(() => {
     if (!selected) return; // only active on focus layout
     const handleKey = (e: KeyboardEvent) => {
